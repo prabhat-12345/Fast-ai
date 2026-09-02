@@ -3,127 +3,89 @@ import google.generativeai as genai
 from PIL import Image
 
 # =====================================================================
-# 1. PAGE SETUP & PREMIUM ULTRA-CLEAN CORE CSS
+# 1. PAGE CONFIGURATION & PREMIUM DARK UI
 # =====================================================================
 st.set_page_config(
-    page_title="NexAI Pro - Ultimate ChatGPT UI",
+    page_title="NexAI Pro - SuperFast",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="collapsed"
 )
 
-# Deep Custom CSS to make attachment options look inline inside chat box
+# Premium Style
 st.markdown("""
 <style>
     :root { background-color: #0B0F19; }
     .stApp { background-color: #0B0F19; color: #F3F4F6; }
-    
-    /* Smooth Chat bubble styling */
-    .user-msg { background: linear-gradient(135deg, #3B82F6, #1D4ED8); padding: 12px 16px; border-radius: 16px 16px 2px 16px; color: white; margin-bottom: 10px; float: right; clear: both; max-width: 80%; box-shadow: 0 4px 10px rgba(59,130,246,0.2); }
-    .bot-msg { background-color: #1F2937; padding: 12px 16px; border-radius: 16px 16px 16px 2px; color: #E5E7EB; margin-bottom: 10px; float: left; clear: both; max-width: 80%; border: 1px solid #374151; }
-    
-    /* ChatGPT Inline Input Box simulation styles */
-    div[data-testid="stForm"] {
-        border: 1px solid #374151 !important;
-        background-color: #111827 !important;
-        border-radius: 24px !important;
-        padding: 8px 16px !important;
-    }
-    .stTextInput input {
-        background-color: transparent !important;
-        border: none !important;
-        color: white !important;
-    }
+    div[data-testid="stChatInput"] { background-color: #111827 !important; border-radius: 12px; }
+    .user-msg { background: linear-gradient(135deg, #3B82F6, #1D4ED8); padding: 12px; border-radius: 14px; color: white; margin-bottom: 10px; float: right; clear: both; max-width: 85%; }
+    .bot-msg { background-color: #1F2937; padding: 12px; border-radius: 14px; color: #E5E7EB; margin-bottom: 10px; float: left; clear: both; max-width: 85%; border: 1px solid #374151; }
 </style>
 """, unsafe_allow_html=True)
 
-# Chat Session Management
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": "Hello! I am NexAI. Upload or click a picture right here from the entry bar to instantly process queries. How can I assist you?"}]
+# Session Container for Fast Reloads
+if "sessions" not in st.session_state:
+    st.session_state.sessions = {"Default Chat": [{"role": "assistant", "content": "Hello! I am active on Gemini 3.6. How can I help you today?"}]}
+if "current_session" not in st.session_state:
+    st.session_state.current_session = "Default Chat"
 
-# Initialize API Credentials
-api_key = st.secrets.get("GEMINI_API_KEY", "")
-if api_key:
-    genai.configure(api_key=api_key)
-else:
-    with st.sidebar:
-        api_key = st.text_input("Enter Gemini API Key", type="password")
-        if api_key:
-            genai.configure(api_key=api_key)
+current_chat = st.session_state.current_session
 
-# Render Chat logs
-chat_history_container = st.container()
-with chat_history_container:
-    for msg in st.session_state.messages:
-        if msg["role"] == "user":
-            st.markdown(f'<div class="user-msg">{msg["content"]}</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="bot-msg">{msg["content"]}</div>', unsafe_allow_html=True)
+# Sidebar Keys
+with st.sidebar:
+    st.markdown('<h3>🤖 NexAI Settings</h3>', unsafe_allow_html=True)
+    api_key = st.text_input("Enter Gemini API Key", type="password", value=st.secrets.get("GEMINI_API_KEY", ""))
+    if api_key:
+        genai.configure(api_key=api_key)
 
-# =====================================================================
-# 2. CHATGPT INLINE INPUT & MULTIMODAL MEDIA BAR
-# =====================================================================
-st.markdown("---")
-
-# Fragment ensures that opening uploader/camera does not refresh the active chats or state
+# Main UI Division using Fragments to STOP Full Page Restarts on scrolling
 @st.fragment
-def inline_input_composer():
-    img_attachment = None
+def render_media_and_chat():
+    img_data = None
+    upload_tab, camera_tab = st.tabs(["📁 Upload Image", "📸 Live Camera"])
     
-    # Bottom layout structure with input system inside a form block
-    with st.form(key="chat_composer_form", clear_on_submit=True):
-        col_text, col_cam, col_upload, col_btn = st.columns([0.70, 0.12, 0.12, 0.06])
-        
-        with col_text:
-            user_text = st.text_input("", placeholder="Ask NexAI anything...", label_visibility="collapsed")
+    with upload_tab:
+        uploaded_file = st.file_uploader("Choose photo:", type=["jpg", "jpeg", "png"], key="uploader")
+        if uploaded_file:
+            img_data = Image.open(uploaded_file)
+            st.image(img_data, width=250)
             
-        with col_cam:
-            # Inline System Camera trigger 
-            camera_snap = st.camera_input("📸", label_visibility="collapsed")
-            if camera_snap:
-                img_attachment = Image.open(camera_snap)
-                st.toast("Camera Snapshot Attached!")
-                
-        with col_upload:
-            # Inline File upload system
-            file_upload = st.file_uploader("📁", type=["jpg","png","jpeg"], label_visibility="collapsed")
-            if file_upload:
-                img_attachment = Image.open(file_upload)
-                st.toast("Image File Attached!")
-                
-        with col_btn:
-            submit_action = st.form_submit_with_arrow("🚀")
+    with camera_tab:
+        camera_file = st.camera_input("Capture:", key="camera")
+        if camera_file:
+            img_data = Image.open(camera_file)
+            st.image(img_data, width=250)
 
-    # Processing state
-    if submit_action and (user_text or img_attachment):
+    # Message Display Container
+    chat_container = st.container()
+    with chat_container:
+        for message in st.session_state.sessions[current_chat]:
+            if message["role"] == "user":
+                st.markdown(f'<div class="user-msg">{message["content"]}</div>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="bot-msg">{message["content"]}</div>', unsafe_allow_html=True)
+
+    # Chat execution without full app crash/reload
+    if prompt := st.chat_input("Ask anything..."):
         if not api_key:
-            st.error("Missing API key entry configuration.")
-            return
-
-        display_text = user_text if user_text else "[Attached Image analyzed]"
-        st.session_state.messages.append({"role": "user", "content": display_text})
-        
-        # Immediate display without standard reload
-        st.markdown(f'<div class="user-msg">{display_text}</div>', unsafe_allow_html=True)
-        
-        with st.spinner("Searching and answering in real-time..."):
-            try:
-                # Super-fast optimized engine version
-                model = genai.GenerativeModel('gemini-3.6-flash')
-                
-                if img_attachment:
-                    response = model.generate_content([user_text if user_text else "Describe and solve this problem step by step.", img_attachment])
-                else:
-                    response = model.generate_content(user_text)
+            st.error("Please add API key in sidebar first.")
+        else:
+            st.session_state.sessions[current_chat].append({"role": "user", "content": prompt})
+            st.markdown(f'<div class="user-msg">{prompt}</div>', unsafe_allow_html=True)
+            
+            with st.spinner("Analyzing data..."):
+                try:
+                    model = genai.GenerativeModel('gemini-3.6-flash')
+                    if img_data:
+                        response = model.generate_content([prompt, img_data])
+                    else:
+                        response = model.generate_content(prompt)
                     
-                ai_output = response.text
-                st.session_state.messages.append({"role": "assistant", "content": ai_output})
-                st.markdown(f'<div class="bot-msg">{ai_output}</div>', unsafe_allow_html=True)
-                st.rerun()
-                
-            except Exception as e:
-                st.error(f"Execution failed: {str(e)}")
+                    ai_response = response.text
+                    st.session_state.sessions[current_chat].append({"role": "assistant", "content": ai_response})
+                    st.markdown(f'<div class="bot-msg">{ai_response}</div>', unsafe_allow_html=True)
+                except Exception as e:
+                    st.error(f"Error: {str(e)}")
 
-# Launch UI controller
-inline_input_composer()
-              
+# Execute block
+render_media_and_chat()
